@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = "json"  # json / console
 
+    # ── JWT ──
+    jwt_secret_key: str = "dev-secret-key-change-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 1440  # 24 小时
+
+    # ── Encryption ──
+    encryption_key: str = "ai-data-platform"  # Fernet key，用于加密数据库密码
+
     @property
     def is_dev(self) -> bool:
         return self.environment == "dev"
