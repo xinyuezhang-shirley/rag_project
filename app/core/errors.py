@@ -39,6 +39,9 @@ class SQLGenerationError(AppError):
     def __init__(self, message: str = "SQL 生成失败"):
         super().__init__(code="SQL_GENERATION_ERROR", message=message, status_code=500)
 
+class SQLExecutionError(AppError):
+    def __init__(self, message: str = "SQL 执行失败"):
+        super().__init__(code="SQL_EXECUTION_ERROR", message=message, status_code=500)
 
 class PermissionDeniedError(AppError):
     def __init__(self, message: str = "权限不足"):

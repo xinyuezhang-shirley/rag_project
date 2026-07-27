@@ -22,8 +22,13 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # ── LLM ──
+    llm_provider: str = "openai"  # openai / stub
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_temperature: float = 0.0
+    openai_max_tokens: int = 2048
+    openai_timeout: int = 30
 
     # ── Logging ──
     log_level: str = "INFO"
@@ -36,6 +41,10 @@ class Settings(BaseSettings):
 
     # ── Encryption ──
     encryption_key: str = "ai-data-platform"  # Fernet key，用于加密数据库密码
+
+    # ── SQL Engine ──
+    sql_max_rows: int = 100
+    sql_timeout_seconds: int = 15
 
     @property
     def is_dev(self) -> bool:
