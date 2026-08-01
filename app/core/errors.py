@@ -43,6 +43,14 @@ class SQLExecutionError(AppError):
     def __init__(self, message: str = "SQL 执行失败"):
         super().__init__(code="SQL_EXECUTION_ERROR", message=message, status_code=500)
 
+class SQLValidationError(AppError):
+    """SQL 安全校验未通过。"""
+    def __init__(self, reason: str, detail: str = ""):
+        message = f"SQL 安全校验未通过：{reason}"
+        if detail:
+            message += f"（{detail}）"
+        super().__init__(code="SQL_VALIDATION_ERROR", message=message, status_code=422)
+        
 class PermissionDeniedError(AppError):
     def __init__(self, message: str = "权限不足"):
         super().__init__(code="PERMISSION_DENIED", message=message, status_code=403)
