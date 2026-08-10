@@ -49,6 +49,7 @@ async def create_datasource(
         database_name=req.database_name,
         username=req.username,
         encrypted_password=encrypt_value(req.password),
+        sensitive_columns=",".join(req.sensitive_columns) if req.sensitive_columns else None,
     )
     db.add(ds)
     await db.flush()
@@ -157,6 +158,9 @@ async def update_datasource(
 
     if "name" in fields_set:
         ds.name = req.name
+
+    if "sensitive_columns" in fields_set:
+        ds.sensitive_columns = ",".join(req.sensitive_columns) if req.sensitive_columns else None
 
     await db.flush()
     logger.info("datasource.updated", datasource_id=ds.id, user_id=user.id, fields=list(fields_set))

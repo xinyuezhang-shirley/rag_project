@@ -1,4 +1,6 @@
 import time
+import psycopg2
+import psycopg2.errors as pg_errors
 from sqlalchemy import create_engine, text
 
 from app.models.datasource import DataSource
@@ -44,7 +46,14 @@ def execute_sql(datasource: DataSource, sql: str) -> SQLExecutionResult:
 
     settings = get_settings()
     plain_password = decrypt_value(datasource.encrypted_password)
-    url = _build_sync_url(datasource, plain_password)
+    url = _build_sync_url(
+        datasource.db_type,
+        datasource.host,
+        datasource.port,
+        datasource.database_name,
+        datasource.username,
+        plain_password,
+    )
 
     try:
         engine = create_engine(url, connect_args={"connect_timeout": 5})
@@ -84,8 +93,7 @@ def execute_sql(datasource: DataSource, sql: str) -> SQLExecutionResult:
         )
 
     except Exception as e:
-        error_msg = str(e).lower()
-        classified = _classify_error(error_msg, sql)
+        classified = _classify_error(e, sql)
 
         logger.error(
             "sql.execution_failed",
@@ -94,43 +102,85 @@ def execute_sql(datasource: DataSource, sql: str) -> SQLExecutionResult:
             error_type=classified["type"],
             error=str(e),
         )
-        raise SQLExecutionError(classified["message"])
+        raise SQLExecutionError(classified["message"], error_type=classified["type"])
 
-    
-def _classify_error(error_msg: str, sql: str) -> dict:
-        """将数据库报错分类为用户可读的错误信息。"""
 
-        if "syntax error" in error_msg:
-            return {
-                "type": "syntax_error",
-                "message": "生成的 SQL 语法错误，请尝试用不同的方式描述您的问题",
-            }
+def _classify_error(exc: Exception, sql: str) -> dict:
+    """将数据库报错分类为用户可读的错误信息。
 
-        if "does not exist" in error_msg or "relation" in error_msg:
-            return {
-                "type": "table_not_found",
-                "message": "查询引用了不存在的表或列，请确认数据源的表结构是否变更",
-            }
+    优先用 psycopg2.errors 的具体异常类型分类（作业3）：SQLAlchemy 把驱动抛出的
+    原始异常包在 exc.orig 里，只要是 Postgres 连接，orig 就是 psycopg2 的异常实例，
+    可以按类型精确判断，不依赖报错文案的具体措辞（更准确，且不受多语言/驱动版本
+    报错文案变化的影响）。
+    只有当驱动不是 psycopg2 时（如 MySQL 用 pymysql，异常类型体系完全不同，
+    见 作业3 思考题），才退回到字符串匹配兜底。
+    """
+    orig = getattr(exc, "orig", exc)
 
-        if "permission denied" in error_msg:
-            return {
-                "type": "permission_denied",
-                "message": "数据库用户权限不足，请检查数据源的数据库用户是否有 SELECT 权限",
-            }
-
-        if "timeout" in error_msg or "cancel" in error_msg:
-            return {
-                "type": "timeout",
-                "message": "查询执行超时，请尝试缩小查询范围（如增加时间过滤条件）",
-            }
-
-        if "connection" in error_msg or "connect" in error_msg:
-            return {
-                "type": "connection_error",
-                "message": "无法连接到数据库，请检查数据源的连接信息是否正确",
-            }
-
+    if isinstance(orig, pg_errors.SyntaxError):
         return {
-            "type": "unknown",
-            "message": f"查询执行失败，请稍后重试",
+            "type": "syntax_error",
+            "message": "生成的 SQL 语法错误，请尝试用不同的方式描述您的问题",
         }
+
+    if isinstance(orig, (pg_errors.UndefinedTable, pg_errors.UndefinedColumn)):
+        return {
+            "type": "table_not_found",
+            "message": "查询引用了不存在的表或列，请确认数据源的表结构是否变更",
+        }
+
+    if isinstance(orig, pg_errors.InsufficientPrivilege):
+        return {
+            "type": "permission_denied",
+            "message": "数据库用户权限不足，请检查数据源的数据库用户是否有 SELECT 权限",
+        }
+
+    if isinstance(orig, pg_errors.QueryCanceled):
+        return {
+            "type": "timeout",
+            "message": "查询执行超时，请尝试缩小查询范围（如增加时间过滤条件）",
+        }
+
+    if isinstance(orig, psycopg2.OperationalError):
+        return {
+            "type": "connection_error",
+            "message": "无法连接到数据库，请检查数据源的连接信息是否正确",
+        }
+
+    # 非 psycopg2 驱动（如 MySQL/pymysql）没有对应的异常类型体系，退回字符串匹配兜底
+    error_msg = str(exc).lower()
+
+    if "syntax error" in error_msg or "syntax" in error_msg:
+        return {
+            "type": "syntax_error",
+            "message": "生成的 SQL 语法错误，请尝试用不同的方式描述您的问题",
+        }
+
+    if "does not exist" in error_msg or "relation" in error_msg or "doesn't exist" in error_msg or "unknown column" in error_msg:
+        return {
+            "type": "table_not_found",
+            "message": "查询引用了不存在的表或列，请确认数据源的表结构是否变更",
+        }
+
+    if "permission denied" in error_msg or "access denied" in error_msg:
+        return {
+            "type": "permission_denied",
+            "message": "数据库用户权限不足，请检查数据源的数据库用户是否有 SELECT 权限",
+        }
+
+    if "timeout" in error_msg or "cancel" in error_msg:
+        return {
+            "type": "timeout",
+            "message": "查询执行超时，请尝试缩小查询范围（如增加时间过滤条件）",
+        }
+
+    if "connection" in error_msg or "connect" in error_msg:
+        return {
+            "type": "connection_error",
+            "message": "无法连接到数据库，请检查数据源的连接信息是否正确",
+        }
+
+    return {
+        "type": "unknown",
+        "message": "查询执行失败，请稍后重试",
+    }

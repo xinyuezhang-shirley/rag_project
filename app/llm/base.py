@@ -28,3 +28,8 @@ class BaseLLMAdapter(ABC):
     async def generate_with_usage(self, messages: list[dict]) -> LLMResponse:
         """输入 messages，返回文本 + token 用量。"""
         ...
+
+    @abstractmethod
+    async def embed(self, text: str) -> list[float]:
+        """输入文本，返回 embedding 向量（作业1：语义相似度缓存）。"""
+        ...

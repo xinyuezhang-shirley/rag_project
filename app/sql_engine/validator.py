@@ -42,19 +42,60 @@ DANGEROUS_FUNCTIONS = {
 @dataclass
 class ValidationResult:
     is_safe: bool
-    level: str = ""       # L1 / L2 / L3 / L4
+    level: str = ""       # L1 / L2 / L3 / L4 / L5
     reason: str = ""
     blocked_detail: str = ""
+
+
+def _collect_table_alias_map(statement: exp.Select) -> dict[str, str]:
+    """构建 表别名/表名 → 真实表名 的映射（小写）。"""
+    mapping: dict[str, str] = {}
+    for table in statement.find_all(exp.Table):
+        real_name = table.name.lower()
+        mapping[real_name] = real_name
+        alias = table.alias
+        if alias:
+            mapping[alias.lower()] = real_name
+    return mapping
+
+
+def _collect_select_aliases(statement: exp.Select) -> set[str]:
+    """收集整条语句中出现的列别名（AS xxx），别名不需要在原始 Schema 中存在。"""
+    return {a.alias.lower() for a in statement.find_all(exp.Alias) if a.alias}
+
+
+def _iter_referenced_columns(statement: exp.Select):
+    """遍历语句中引用的列，返回 (列名, 候选表名列表)。
+    SELECT * 展开为 exp.Star，不会被 find_all(exp.Column) 捕获，天然跳过。
+    """
+    alias_map = _collect_table_alias_map(statement)
+    select_aliases = _collect_select_aliases(statement)
+    all_tables = sorted(set(alias_map.values()))
+
+    for col in statement.find_all(exp.Column):
+        name = col.name.lower()
+        if name in select_aliases:
+            continue  # 引用的是列别名（如 ORDER BY total_sales），不校验
+
+        qualifier = col.table.lower() if col.table else ""
+        if qualifier:
+            candidate_tables = [alias_map.get(qualifier, qualifier)]
+        else:
+            candidate_tables = all_tables
+
+        yield name, candidate_tables
 
 
 def validate_sql(
     sql: str,
     allowed_tables: list[str] | None = None,
+    allowed_columns: dict[str, list[str]] | None = None,
+    sensitive_columns: list[str] | None = None,
     db_type: str = "postgresql",
     max_subquery_depth: int = 4,
     max_join_count: int = 6,
 ) -> ValidationResult:
-    """对 LLM 生成的 SQL 进行四层安全校验。"""
+    """对 LLM 生成的 SQL 进行多层安全校验。"""
 
     # ── L1：语句类型检查 ──
     dialect = DB_TYPE_TO_SQLGLOT_DIALECT.get(db_type, db_type)
@@ -119,6 +160,35 @@ def validate_sql(
                 reason="查询了未授权的表",
                 blocked_detail=f"不允许查询的表：{', '.join(sorted(unauthorized))}",
             )
+
+    # ── L2 扩展：列名授权检查（作业1）──
+    if allowed_columns is not None:
+        allowed_columns_lower = {
+            t.lower(): {c.lower() for c in cols} for t, cols in allowed_columns.items()
+        }
+        for col_name, candidate_tables in _iter_referenced_columns(statement):
+            found = any(
+                col_name in allowed_columns_lower.get(t, set()) for t in candidate_tables
+            )
+            if not found:
+                return ValidationResult(
+                    is_safe=False,
+                    level="L2",
+                    reason="查询了未授权或不存在的列",
+                    blocked_detail=f"列名{col_name} 不在允许的 Schema 中",
+                )
+
+    # ── L5：敏感列过滤（作业4）──
+    if sensitive_columns:
+        sensitive_set = {c.lower() for c in sensitive_columns}
+        for col_name, _candidate_tables in _iter_referenced_columns(statement):
+            if col_name in sensitive_set:
+                return ValidationResult(
+                    is_safe=False,
+                    level="L5",
+                    reason=f"该列包含敏感信息，不允许查询：{col_name}",
+                    blocked_detail=f"字段{col_name} 被标记为敏感列",
+                )
 
     # ── L3：危险函数检查 ──
     for func_node in statement.find_all(exp.Anonymous, exp.Func):

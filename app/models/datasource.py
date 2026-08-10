@@ -1,3 +1,5 @@
+from typing import Optional
+
 from sqlalchemy import String, Integer, Boolean, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +19,8 @@ class DataSource(TimestampMixin, Base):
     username: Mapped[str] = mapped_column(String(255))
     encrypted_password: Mapped[str] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 逗号分隔的敏感列名列表（per-DataSource 覆盖/追加全局 SQL_SENSITIVE_COLUMNS 配置）
+    sensitive_columns: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # 关系
     owner: Mapped["User"] = relationship(back_populates="datasources")

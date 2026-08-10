@@ -40,7 +40,9 @@ class SQLGenerationError(AppError):
         super().__init__(code="SQL_GENERATION_ERROR", message=message, status_code=500)
 
 class SQLExecutionError(AppError):
-    def __init__(self, message: str = "SQL 执行失败"):
+    def __init__(self, message: str = "SQL 执行失败", error_type: str = "unknown"):
+        # error_type 取值见 app.sql_engine.executor._classify_error（作业3：可修复 vs 不可修复错误分类）
+        self.error_type = error_type
         super().__init__(code="SQL_EXECUTION_ERROR", message=message, status_code=500)
 
 class SQLValidationError(AppError):

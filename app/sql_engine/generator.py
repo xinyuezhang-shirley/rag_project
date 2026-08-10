@@ -2,7 +2,7 @@ import re
 
 from app.llm.factory import get_llm_adapter
 from app.llm.base import LLMResponse
-from app.sql_engine.prompt_builder import build_text_to_sql_messages
+from app.sql_engine.prompt_builder import build_text_to_sql_messages, append_retry_feedback
 from app.core.logging import get_logger
 from app.core.errors import SQLGenerationError
 
@@ -31,14 +31,24 @@ async def generate_sql(
     question: str,
     schema_tables: list[dict],
     db_type: str = "postgresql",
+    retry_history: list[dict] | None = None,
+    conversation_history: list[dict] | None = None
 ) -> tuple[str, LLMResponse]:
-    """生成 SQL，返回 (清洗后的SQL, LLM完整响应)。"""
+    """生成 SQL，返回 (清洗后的SQL, LLM完整响应)。
+
+    retry_history: 之前失败的尝试 [{"sql":..., "error":...}, ...]（作业2 错误自修复），
+    非空时会作为额外的对话轮次追加，让 LLM 看到上次的 SQL 和报错后重新生成。
+    """
 
     messages = build_text_to_sql_messages(
         question=question,
         schema_tables=schema_tables,
         db_type=db_type,
+        conversation_history=conversation_history,
     )
+
+    if retry_history:
+        messages = append_retry_feedback(messages, retry_history)
 
     adapter = get_llm_adapter()
     response = await adapter.generate_with_usage(messages)
@@ -54,6 +64,7 @@ async def generate_sql(
         sql_length=len(sql),
         model=response.model,
         prompt_tokens=response.usage.prompt_tokens,
+        retry_count=len(retry_history) if retry_history else 0,
     )
 
     return sql, response

@@ -20,6 +20,7 @@ class OpenAIAdapter(BaseLLMAdapter):
         self.model = settings.openai_model
         self.temperature = settings.openai_temperature
         self.max_tokens = settings.openai_max_tokens
+        self.embedding_model = settings.openai_embedding_model
 
     async def generate(self, messages: list[dict]) -> str:
         response = await self.generate_with_usage(messages)
@@ -59,3 +60,14 @@ class OpenAIAdapter(BaseLLMAdapter):
         except Exception as e:
             logger.error("llm.generate.failed", model=self.model, error=str(e))
             raise LLMError(f"LLM 调用失败：{str(e)}")
+
+    async def embed(self, text: str) -> list[float]:
+        try:
+            response = await self.client.embeddings.create(
+                model=self.embedding_model,
+                input=text,
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            logger.error("llm.embed.failed", model=self.embedding_model, error=str(e))
+            raise LLMError(f"Embedding 调用失败：{str(e)}")
