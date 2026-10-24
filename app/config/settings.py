@@ -57,6 +57,17 @@ class Settings(BaseSettings):
     sql_timeout_seconds: int = 15
     sql_sensitive_columns: list[str] = ["password", "ssn", "salary", "credit_card"]
 
+    # ── Embedding / 检索 ──
+    embedding_cache_enabled: bool = True   # 作业1：Embedding 缓存
+    rerank_method: str = "llm"             # llm / cross_encoder（作业4）
+    cross_encoder_model: str = "BAAI/bge-reranker-base"
+
+    # ── Chunking ──
+    chunk_strategy: str = "recursive"     # fixed / heading / recursive
+    chunk_size: int = 500
+    chunk_overlap: int = 50
+    max_file_size_mb: int = 20
+
     @property
     def is_dev(self) -> bool:
         return self.environment == "dev"
