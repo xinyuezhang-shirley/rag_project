@@ -68,6 +68,14 @@ class Settings(BaseSettings):
     chunk_overlap: int = 50
     max_file_size_mb: int = 20
 
+    # ── RAG ──
+    rag_top_k: int = 5
+    rag_context_max_tokens: int = 3000
+    rag_low_confidence_threshold: float = 0.5
+    rag_citation_support_threshold: float = 0.3
+    rag_query_rewrite_enabled: bool = True      # 作业1：多轮问题改写
+    rag_citation_verify_method: str = "bigram"  # bigram / llm（作业2）
+
     @property
     def is_dev(self) -> bool:
         return self.environment == "dev"

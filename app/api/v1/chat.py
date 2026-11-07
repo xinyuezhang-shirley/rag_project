@@ -1,5 +1,8 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.schemas.document_qa import DocQARequest, DocQAResponse
+from app.services import document_qa
+
 
 from app.db.session import get_db
 from app.api.deps import get_current_user
@@ -61,3 +64,15 @@ async def send_chat_message(
     return await chat_service.send_message(
         db, current_user, conversation_id, req.message
     )
+
+@router.post("/{conversation_id}/ask-docs", response_model=DocQAResponse)
+async def ask_documents(
+    conversation_id: int,
+    req: DocQARequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await document_qa.ask_documents(
+        db, current_user, conversation_id, req.message, req.document_ids
+    )
+    return result

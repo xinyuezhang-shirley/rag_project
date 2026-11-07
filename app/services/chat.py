@@ -38,19 +38,19 @@ logger = get_logger(__name__)
 
 
 async def create_conversation(
-    db: AsyncSession, user: User, datasource_id: int, title: str = "新对话"
+    db: AsyncSession, user: User, datasource_id: int | None = None, title: str = "新对话"
 ) -> Conversation:
-    ds = await get_datasource(db, user, datasource_id)
+    # datasource_id 有值时才校验数据源存在
+    if datasource_id is not None:
+        ds = await get_datasource(db, user, datasource_id)
 
     conv = Conversation(
         user_id=user.id,
-        datasource_id=ds.id,
+        datasource_id=datasource_id,
         title=title,
     )
     db.add(conv)
     await db.flush()
-
-    logger.info("conversation.created", conversation_id=conv.id, user_id=user.id)
     return conv
 
 

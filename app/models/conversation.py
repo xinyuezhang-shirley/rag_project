@@ -1,4 +1,5 @@
 from sqlalchemy import String, ForeignKey, Integer
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional
 
@@ -32,6 +33,9 @@ class Message(TimestampMixin, Base):
     )
     role: Mapped[str] = mapped_column(String(20))  # user / assistant / system
     content: Mapped[str] = mapped_column(String(10000))
+    # RAG 问答的附加信息（citations / confidence / answerable 等）。
+    # 注意字段名是 meta 而不是 metadata——metadata 是 SQLAlchemy 声明式基类的保留属性。
+    meta: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     # 关系
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")

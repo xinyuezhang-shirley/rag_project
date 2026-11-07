@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 class ConversationCreate(BaseModel):
-    datasource_id: int
+    datasource_id: Optional[int] = None
     title: str = "新对话"
 
 

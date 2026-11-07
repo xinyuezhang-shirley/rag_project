@@ -203,6 +203,8 @@ async def hybrid_search(
 
     merged = sorted(score_map.values(), key=lambda r: r.score, reverse=True)
     merged = [r for r in merged if r.score >= score_threshold][:top_k]
+    for r in merged:
+        r.score = round(r.score, 4)  # 加权后重新取整，否则响应里是 0.6264379247472236
 
     logger.info(
         "retrieval.hybrid",
